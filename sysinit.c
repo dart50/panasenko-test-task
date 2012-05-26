@@ -16,7 +16,7 @@
 =======================================================
 */
 
-#include <p24fj64ga004.h>
+#include <p24FJ64GA004.h>
 #include <uart.h>
 #include <PPS.h>
 #include <adc.h>

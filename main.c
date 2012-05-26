@@ -35,7 +35,7 @@
 */
 
 
-#include <p24fj64ga004.h>
+#include <p24FJ64GA004.h>
 #include <stdio.h>
 #include <adc.h>
 #include <uart.h>
