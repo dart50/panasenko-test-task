@@ -1,36 +1,37 @@
-#ifndef __apiuos_h
+/*
+-------------------------------------------------------
+	Creation date:		3 may 2012
+	Author:				Eugene Panasenko
+	Project name:		Periodic tasks
+	File name:			apiuos.h
+-------------------------------------------------------
+		
+=======================================================
+	Modification date:	23 may 2012
+	Author:				Eugene Panasenko
+	Changes:			Macro names declared in big letters. 
+						Changed style of names.
+=======================================================
+*/
 
-#define __apiuos_h
-
-
-#define NumberOfTasks 4
-#define MAX_QUEUE 10
+#ifndef __APIUOS_H
+#define __APIUOS_H
 
 
 typedef unsigned int u_int;
 typedef unsigned long u_long;
 
-enum Task_state{				// State of the task
-	ready = 1,					// 
-	run,
-	suspend,
-	blocked,
-	idle
+enum task_state{				// State of the task
+	READY = 1,
+	RUN,
+	SUSPEND,
+	BLOCKED,
+	IDLE
 };
-struct TaskParam{
-	int SuspDel;
-	enum Task_state TaskState;
-	void (*cf) (void);
-};	// task parameter
 
+void CreateTask(void (*pAddressTask) (), u_int unOSDelay, enum task_state RunState);
+void Run(void);
+void DelayService(void);
+void ChangeStateTask(void (*pAddressTask) (), enum task_state RunState);
 
-extern void SendToUART(char *);
-extern void Task_1(void);
-extern void Task_2(void);
-extern void Task_3(void);
-extern void uos_init(void);
-extern void CreateTask(void (*) (), u_int, enum Task_state);
-extern void Run(void);
-extern void DelayService(void);
-
-#endif
+#endif							// __APIUOS_H
