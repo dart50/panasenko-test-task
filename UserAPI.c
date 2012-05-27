@@ -8,7 +8,7 @@
 */
 
 #include <p24FJ64GA004.h>
-#include "UserAPI.h"
+#include "userapi.h"
 #include "sysinit.h"
 
 /**********************EXAMPLE*************************
@@ -23,12 +23,6 @@ void Task_X(void)			// X - unique name
 	
 	// if need delay
 	UOSDelay(2);
-	
-	// if need change state of task
-	ChangeStateTask(Task_X, BLOCKED);
-	
-	//-------------------------
-	TaskShedule();
 }
 
 ********************************************************/
@@ -37,28 +31,25 @@ void Task_1(void)
 {
 	// place here your code
 	//-------------------------
-	RED_LED = ~RED_LED;
+	PIN_RED_LED = ~PIN_RED_LED;
 	UOSDelay(2);
 	//-------------------------
-	TaskShedule();
 }
 
 void Task_2(void)
 {
 	// place here your code
 	//--------------------------
-	GREEN_LED = ~GREEN_LED;
+	PIN_GREEN_LED = ~PIN_GREEN_LED;
 	UOSDelay(10);
 	//--------------------------
-	TaskShedule();
 }
 
 void Task_3(void)
 {
 	// place here your code
 	//--------------------------
-	SendToUART("TASK 3>> ");
+	SendToUART("TASK 3>> \r\n");
 	UOSDelay(6);
 	//--------------------------
-	TaskShedule();
 }

@@ -17,156 +17,163 @@
 		In some functions "while" cycle changed to "for"
 						
 =======================================================
-*/
+	Modification date:	27 may 2012
+	Author:				Eugene Panasenko
+	
+		Added self-debugging code for definition
+	UART_AVAILABILITY. Modified function CreateTask():
+	now attempt pass wrong parameters will result in an
+	error. Queue of tasks was changed to single task.
+=====================================================*/
 
 #include <p24FJ64GA004.h>
 #include "apiuos.h"
 #include "sysinit.h"
 #include "UserAPI.h"
 
-
 volatile static struct TaskParam{			// task parameters
-	unsigned int unSuspDel;
-	enum task_state TaskState;				// current task state
-	void (*pTaskTableAddress) (void);
-} TableParam[NUMBER_OF_TASK];
+	unsigned int unSuspDel;					// delay for state SUSPEND
+	enum TASK_STATE TaskState;				// current task state
+	void (*pvTaskTableAddress) (void);		// address of the task
+} TableParam[MAX_NUMBER_OF_TASK];				// table of the task
 
-volatile static u_int unQueueTask;			// queue of tasks
+static u_int unTableTaskPosition = 0;		// queue of tasks
+static u_int unNumberTask = 0;
 
 // queue of tasks init
-static void (*pvTaskLocation[MAX_QUEUE])(void);
+static void (*pvTaskLocation)(void);
 static void TaskFree(void);
 
 /* -------------------------------------------------------------
-this function is intended for task creating in general cycle
+	This function intended for creating list of the task
 ----------------------------------------------------------------*/
-void CreateTask(void (*pAddressTask) (), u_int unOSDelay, enum task_state RunState)
-{
-	static unsigned int unNumberTask;
+void CreateTask(void (*pvAddressTask) (), u_int unOSDelay, enum TASK_STATE RunState)
+{	
 	
-	//  clear the queue of tasks
-	if(0 == unNumberTask)					// for first call
-	{										// clear a queue
-		unsigned int unQueue;				// Queue
-		for(unQueue = 0; unQueue < MAX_QUEUE; unQueue++)
-		{
-			pvTaskLocation[unQueue] = &TaskFree;
-		}	
+	// clear the current task
+	if(0 == unNumberTask) pvTaskLocation = &TaskFree;
+	
+	// if parameters are not correct
+	if((unOSDelay > 0) && (SUSPEND != RunState))
+	{
+		#ifdef UART_AVAILABLE
+			SendToUART("ERROR in parameters CreateTask(): unOSDelay > 0, but RunState is not SUSPEND \r\n");
+		#else
+			#error "UART is not available!"
+		#endif										// UART_AVAILABLE
+		while(1);
+	}
+	if((RunState == SUSPEND) && (0 == unOSDelay))
+	{
+		#ifdef UART_AVAILABLE
+			SendToUART("ERROR in parameters CreateTask(): RunState is SUSPEND, but unOSDelay equal 0 \r\n");
+		#endif										// UART_AVAILABLE
+		while(1);
 	}
 	
-	// for task that has a pause - set the state to SUSPEND
-	if(unOSDelay > 0)
+	TableParam[unNumberTask].TaskState = RunState;	// Retain the state
+	TableParam[unNumberTask].unSuspDel = unOSDelay;	// & delay
+	
+	// copy address of task to task list
+	TableParam[unNumberTask].pvTaskTableAddress = pvAddressTask;
+	
+	unNumberTask++;									// increment counter for next task
+	
+	if(unNumberTask >= MAX_NUMBER_OF_TASK)				// if was exceeded the table size
 	{
-		TableParam[unNumberTask].TaskState = SUSPEND;	// for incorrect data
+		#ifdef UART_AVAILABLE
+			SendToUART("ERROR: Number of tasks exceeds the table size! \r\n");
+		#endif										// UART_AVAILABLE
+		while(1);
 	}
-	else
-	{
-		if(RunState == SUSPEND)
-		{
-			TableParam[unNumberTask].TaskState = IDLE;
-		}
-		else
-		{
-			TableParam[unNumberTask].TaskState = RunState;
-		}
-	}
-	TableParam[unNumberTask].unSuspDel = unOSDelay;
-	// copy address task to table of tasks
-	TableParam[unNumberTask].pTaskTableAddress = pAddressTask;
-	unNumberTask++;
-	// to avoid exceed the table size. Last cell - last function
-	if(unNumberTask >= NUMBER_OF_TASK) unNumberTask--;
 }
 
-void TaskShedule(void)
+/*---------------------------------------------------------------------
+	This function provides a handling the queue of tasks
+---------------------------------------------------------------------*/
+static void TaskShedule(void)
 {	
-	if((&TaskFree) == pvTaskLocation[0])			// queue is free
-	{
-		unsigned int unNumber;
-
-		unQueueTask = 0;							// zeroing of queue
-		for(unNumber = 0; unNumber < NUMBER_OF_TASK; unNumber++)
+	if((&TaskFree) == pvTaskLocation)				// queue is free
+	{	
+		// search the ready task
+		for(unTableTaskPosition = 0; unTableTaskPosition < unNumberTask; unTableTaskPosition++)
 		{
-			if(IDLE == TableParam[unNumber].TaskState)
+			// if tasks are waiting for their turn, change them state
+			if(IDLE == TableParam[unTableTaskPosition].TaskState)
 			{
-				TableParam[unNumber].TaskState = RUN;
-				pvTaskLocation[unQueueTask] = TableParam[unNumber].pTaskTableAddress;		// copy task to queue
-				unQueueTask++;
+				TableParam[unTableTaskPosition].TaskState = RUN;
+				pvTaskLocation = TableParam[unTableTaskPosition].pvTaskTableAddress;
+				break;
 			}
 		}
-	}	
-	else
+	}
+	else											// any task executing
 	{
-		unsigned int unNumber = 0;
-		
-		// finding of current task
-		while(pvTaskLocation[0] != TableParam[unNumber].pTaskTableAddress)
+		// terminate the current task and switch to next
+		if(SUSPEND != TableParam[unTableTaskPosition].TaskState)
 		{
-			unNumber++;
-			if(unNumber > NUMBER_OF_TASK) break;
+			TableParam[unTableTaskPosition].TaskState = READY;
+		}
+		unTableTaskPosition++;
+		
+		// and begin execute next task
+		for(	; unTableTaskPosition < unNumberTask; unTableTaskPosition++)
+		{
+			if(IDLE == TableParam[unTableTaskPosition].TaskState)
+			{
+				TableParam[unTableTaskPosition].TaskState = RUN;
+				pvTaskLocation = TableParam[unTableTaskPosition].pvTaskTableAddress;
+				break;
+			}
 		}
 		
-		// if task not was stopped in other task
-		if(RUN == TableParam[unNumber].TaskState)
+		if(unTableTaskPosition >= unNumberTask)		// it is end of table
 		{
-			TableParam[unNumber].TaskState = READY;					// terminate the current task
-			unQueueTask--;
-		}
-		
-		if(0 == unQueueTask)
-		{
-			pvTaskLocation[0] = &TaskFree;							// there is the last task
-		}
-		else
-		{
-				// shift of the queue 
-				for(unNumber = 0; unNumber < (MAX_QUEUE - 1); unNumber++)
-				{
-					pvTaskLocation[unNumber] = pvTaskLocation[unNumber+1];
-				}
-				pvTaskLocation[MAX_QUEUE-1] = &TaskFree;				// last cell
+			unTableTaskPosition = 0;				// go to the top
+			pvTaskLocation = &TaskFree;				// because there is the last task
 		}
 	}
 }
 
+/*----------------------------------------------------------------
+	It creates delay for task
+----------------------------------------------------------------*/
 void DelayService(void)
 {
-	unsigned int unCycleTask;
+	unsigned int unCounter;
 
-	for(unCycleTask = 0; unCycleTask < NUMBER_OF_TASK; unCycleTask++)
+	for(unCounter = 0; unCounter < unNumberTask; unCounter++)
 	{
-		if(TableParam[unCycleTask].unSuspDel > 0)
+		// decrement delay for tasks that in SUSPEND state
+		if((TableParam[unCounter].unSuspDel > 0) && (SUSPEND == TableParam[unCounter].TaskState))
 		{
-			TableParam[unCycleTask].unSuspDel--;
-			if(0 == TableParam[unCycleTask].unSuspDel) TableParam[unCycleTask].TaskState = IDLE;
+			TableParam[unCounter].unSuspDel--;
+			
+			// change state to IDLE if delay equal zero
+			if(0 == TableParam[unCounter].unSuspDel) TableParam[unCounter].TaskState = IDLE;
 		}
 	}
 }
 
+/*-----------------------------------------------------------------
+	This function ensures creation of a delay
+-----------------------------------------------------------------*/
 void UOSDelay(u_int unTickDelay)
 {
-	unsigned int unCurTask;
-	
-	// finding current task
-	for(unCurTask = 0; pvTaskLocation[0] != TableParam[unCurTask].pTaskTableAddress; unCurTask++)
-	{
-		if(unCurTask > NUMBER_OF_TASK)
-		{
-			break;
-		}
-	}
-	TableParam[unCurTask].unSuspDel = unTickDelay;
+	TableParam[unTableTaskPosition].unSuspDel = unTickDelay;
+	TableParam[unTableTaskPosition].TaskState = SUSPEND;
 }
 
+/*-----------------------------------------------------------------
+	Main cycle of tasks
+-----------------------------------------------------------------*/
 void Run(void)
 {
-	(*pvTaskLocation[0])();	// start current task
+	TaskShedule();
+	(*pvTaskLocation)();	// start current task
 }
 
 /* ----------------------------------------------------
-do nothing
+	Do nothing
 ------------------------------------------------------*/
-void TaskFree(void)
-{
-	TaskShedule();
-}
+static void TaskFree(void) {};

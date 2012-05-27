@@ -30,7 +30,7 @@
 	Modification date:	26 may 2012
 	Author:				Eugene Panasenko
 		
-		Deleted functions which not used.
+		Removed functions which not used.
 =======================================================
 */
 
@@ -48,20 +48,17 @@
 int main(void)
 {
 	IOInit();
-	UARTInit(UART_BAUDRATE);				// 9600
+	
+	#if defined UART_AVAILABLE
+		UARTInit(UART_BAUDRATE);			// 9600
+	#endif									// UART_AVAILABLE
+	
 	InitSysTimer(SYS_TICK_PERIOD);			// 500 ms
 	CreateTask(Task_1, 0, IDLE);
-	CreateTask(Task_2, 4, IDLE);
-	CreateTask(Task_3, 2, IDLE);
+	CreateTask(Task_2, 4, SUSPEND);
+	CreateTask(Task_3, 2, SUSPEND);
 	while(1)								// general cycle
 	{
 		Run();
 	}
-}
-
-// The interrupt with period 0.5 seconds
-void __attribute__((__interrupt__, no_auto_psv)) _T4Interrupt(void)
-{
-	_T4IF = 0;
-	DelayService();
 }

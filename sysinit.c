@@ -10,7 +10,7 @@
 	Modification date:	26 may 2012
 	Author:				Eugene Panasenko
 		
-		Clock setting moved in IOInit(), deleted unused
+		Clock setting moved in IOInit(), removed unused
 	functions.
 						
 =======================================================
@@ -21,11 +21,26 @@
 #include <PPS.h>
 #include <adc.h>
 #include "sysinit.h"
+#include "apiuos.h"
+
 
 _CONFIG1(JTAGEN_OFF & GCP_OFF & GWRP_OFF & BKBUG_OFF & COE_OFF & FWDTEN_OFF);
 _CONFIG2(IESO_OFF & SOSCSEL_LPSOSC & WUTSEL_FST & FNOSC_FRCPLL & FCKSM_CSECME & OSCIOFNC_ON);
 
+#define SYSCLK 	16000						// kHz
 
+/*------------------------------------------------------
+	The interrupt with period 0.5 seconds
+------------------------------------------------------*/
+void __attribute__((__interrupt__, no_auto_psv)) _T4Interrupt(void)
+{
+	_T4IF = 0;
+	DelayService();
+}
+
+/*------------------------------------------------------
+	Customize I/O ports
+-------------------------------------------------------*/
 void IOInit(void)
 {
 	// set 8MHz system clock
@@ -54,10 +69,12 @@ void IOInit(void)
 	// lock is on
 	__builtin_write_OSCCONL(OSCCON | 0x40);
 	
-	RED_LED = GREEN_LED = OFF;
-	MOTOR = STOP;
+	PIN_RED_LED = PIN_GREEN_LED = OFF;
 }	
 
+/*------------------------------------------------------
+	system timer initialization
+-------------------------------------------------------*/
 void InitSysTimer(unsigned int unPeriod)	// (ms) using TMR4 & TMR5
 {
 	unsigned int unRest;
@@ -89,6 +106,9 @@ void InitSysTimer(unsigned int unPeriod)	// (ms) using TMR4 & TMR5
 	_T4IE = 1;
 }
 
+/*------------------------------------------------------
+	UART
+-------------------------------------------------------*/
 void UARTInit(unsigned int unBaudrate)	// max. 19200
 {
 	U1MODE =	UART_DIS & UART_IrDA_DISABLE & 
@@ -113,8 +133,12 @@ void UARTInit(unsigned int unBaudrate)	// max. 19200
 				UART_1STOPBIT;
 }
 
+/*------------------------------------------------------
+	pass string to UART
+-------------------------------------------------------*/
 void SendToUART(char *pcStringBuf)
 {
+	// UTXBF isn't clear, therefore need send byte in the first instance
 	U1TXREG = *pcStringBuf++;
 	while(*pcStringBuf != '\0')
 	{
